@@ -59,3 +59,9 @@ Add a new rule object in `bus_scheduler/rules.py` and include it in `DEFAULT_RUL
 - Station charging is always 25 minutes and always to full.
 - The route is linear with no backtracking.
 - Bus scheduling is deterministic and tie-broken by score, number of charges, finish time, then plan order.
+
+## Recent Fixes
+
+- Heap-slot commit semantics (May 31, 2026): corrected station capacity booking so the simulation and commit operations match.
+	- When a station is at capacity the scheduler now consumes the earliest freeing slot (pop the heap) and replaces it with the new booking end time, preventing multiple buses from occupying the same slot.
+	- Added a unit test `tests/test_capacity_tie.py` for equal-arrival/tie cases to prevent regressions.
