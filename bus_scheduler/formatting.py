@@ -51,3 +51,19 @@ def scenario_input_rows(scenario) -> list[dict[str, object]]:
             }
         )
     return rows
+
+
+def bus_charge_rows(timeline) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for idx, charge in enumerate(timeline.charges, start=1):
+        rows.append(
+            {
+                "stop": idx,
+                "station": charge.station,
+                "arrival": format_minute(charge.arrival_minute),
+                "start": format_minute(charge.charge_start_minute),
+                "end": format_minute(charge.charge_end_minute),
+                "wait_minutes": charge.wait_minutes,
+            }
+        )
+    return rows
