@@ -97,12 +97,16 @@ def _simulate_plan(
         cap = station_capacity.get(station, 1)
         if len(heap) < cap:
             charge_start = arrival
+            charge_end = charge_start + route.charge_minutes
+            heapq.heappush(heap, charge_end)
         else:
             charge_start = heap[0]
+            charge_end = charge_start + route.charge_minutes
+            # consume the earliest freeing slot and replace with this bus's end
+            heapq.heappop(heap)
+            heapq.heappush(heap, charge_end)
         wait_minutes = charge_start - arrival
-        charge_end = charge_start + route.charge_minutes
         total_wait += wait_minutes
-        heapq.heappush(heap, charge_end)
         charges.append(
             BusChargeEvent(
                 station=station,
@@ -224,7 +228,17 @@ def schedule_scenario(scenario: ScenarioDefinition) -> ScheduleResult:
 
         # commit chosen events into scheduler state heaps
         for event in best_station_events:
-            heapq.heappush(state.station_heaps.setdefault(event.station, []), event.charge_end_minute)
+            heap = state.station_heaps.setdefault(event.station, [])
+            # free up finished charges relative to this event's arrival (mirror simulation)
+            while heap and heap[0] <= event.arrival_minute:
+                heapq.heappop(heap)
+            cap = state.station_capacity.get(event.station, 1)
+            if len(heap) < cap:
+                heapq.heappush(heap, event.charge_end_minute)
+            else:
+                # consume the earliest freeing slot and reserve it for this event
+                heapq.heappop(heap)
+                heapq.heappush(heap, event.charge_end_minute)
         state.operator_bus_count[bus.operator] = state.operator_bus_count.get(bus.operator, 0) + 1
         state.total_scheduled_buses += 1
 
