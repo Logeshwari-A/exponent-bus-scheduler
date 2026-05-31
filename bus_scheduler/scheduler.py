@@ -1,3 +1,14 @@
+"""Scheduler engine.
+
+This module implements a deterministic, event-driven scheduler that:
+- enumerates feasible charging station plans for a bus,
+- simulates each plan against the current station calendars (min-heaps),
+- scores each plan using pluggable rules, and
+- commits the chosen plan to the shared scheduler state.
+
+Key concepts are documented in `ARCHITECTURE.md` for non-technical reviewers.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -26,11 +37,16 @@ class SchedulerState:
 
 
 def parse_time_to_minute(time_value: str) -> int:
+    """Convert a HH:MM time string into minutes since midnight.
+
+    Example: '19:30' -> 1170
+    """
     hour_text, minute_text = time_value.split(":")
     return int(hour_text) * 60 + int(minute_text)
 
 
 def format_minute(minute_value: int) -> str:
+    """Format minutes-since-midnight back into `HH:MM` for display."""
     hour = (minute_value // 60) % 24
     minute = minute_value % 60
     return f"{hour:02d}:{minute:02d}"
@@ -79,6 +95,17 @@ def _simulate_plan(
     station_heaps: dict[str, list[int]],
     station_capacity: dict[str, int],
 ) -> tuple[BusTimeline, list[StationChargeEvent]]:
+    """Simulate a candidate charging `plan` for `bus`.
+
+    The simulation operates on copies of station heaps so it does not
+    mutate the global scheduler state. Each station heap is a min-heap of
+    `charge_end` minutes representing occupied chargers. When the heap's
+    length reaches the station capacity, the earliest freeing slot is
+    consumed (popped) and replaced by this bus's `charge_end`.
+
+    Returns a `BusTimeline` and the list of `StationChargeEvent`s the
+    simulation produced.
+    """
     ordered_nodes = route.ordered_nodes(bus.direction)
     current_node = ordered_nodes[0]
     current_time = parse_time_to_minute(bus.departure_time)
@@ -87,26 +114,34 @@ def _simulate_plan(
     total_wait = 0
 
     for station in plan:
+        # move to the next station and compute arrival time
         travel_distance = route.distance_between(current_node, station)
         current_time += int(route.travel_minutes(travel_distance))
         arrival = current_time
+
+        # get the simulated heap for this station (list of end-times)
         heap = station_heaps.setdefault(station, [])
-        # free up finished charges
+
+        # free up any finished charges that end at or before arrival
         while heap and heap[0] <= arrival:
             heapq.heappop(heap)
+
         cap = station_capacity.get(station, 1)
         if len(heap) < cap:
+            # there is an available charger immediately
             charge_start = arrival
             charge_end = charge_start + route.charge_minutes
             heapq.heappush(heap, charge_end)
         else:
+            # no immediate charger: schedule at the soonest freeing slot
             charge_start = heap[0]
             charge_end = charge_start + route.charge_minutes
-            # consume the earliest freeing slot and replace with this bus's end
             heapq.heappop(heap)
             heapq.heappush(heap, charge_end)
+
         wait_minutes = charge_start - arrival
         total_wait += wait_minutes
+
         charges.append(
             BusChargeEvent(
                 station=station,
@@ -116,6 +151,7 @@ def _simulate_plan(
                 wait_minutes=wait_minutes,
             )
         )
+
         station_events.append(
             StationChargeEvent(
                 station=station,
@@ -128,11 +164,15 @@ def _simulate_plan(
                 wait_minutes=wait_minutes,
             )
         )
+
+        # continue the simulation from the end of charging
         current_time = charge_end
         current_node = station
 
+    # travel to final destination after last charge
     final_travel_distance = route.distance_between(current_node, ordered_nodes[-1])
     arrival_minute = current_time + int(route.travel_minutes(final_travel_distance))
+
     timeline = BusTimeline(
         bus_id=bus.bus_id,
         operator=bus.operator,
@@ -143,6 +183,7 @@ def _simulate_plan(
         total_wait_minutes=total_wait,
         station_plan=list(plan),
     )
+
     return timeline, station_events
 
 

@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+"""Streamlit app entry for the Bus Charging Scheduler.
+
+This file provides a simple web UI used by non-technical reviewers to:
+- choose one of the 5 provided scenarios,
+- tune the three scoring weights (Individual, Operator, Overall),
+- run the scheduler, and
+- view per-bus timelines and per-station charge orders.
+
+Keep UI code minimal: the scheduler logic lives in `bus_scheduler.scheduler`.
+"""
+
 from pathlib import Path
 
 import pandas as pd
@@ -7,7 +18,12 @@ import streamlit as st
 
 from dataclasses import replace
 
-from bus_scheduler.formatting import bus_timelines_to_rows, scenario_input_rows, station_rows, bus_charge_rows
+from bus_scheduler.formatting import (
+    bus_timelines_to_rows,
+    scenario_input_rows,
+    station_rows,
+    bus_charge_rows,
+)
 from bus_scheduler.loader import load_all_scenarios
 from bus_scheduler.models import Weights
 from bus_scheduler.scheduler import schedule_scenario, format_minute
@@ -22,11 +38,20 @@ st.set_page_config(page_title="Bus Charging Scheduler", layout="wide")
 
 @st.cache_data(show_spinner=False)
 def load_data() -> list:
+    """Load all scenario definitions from the `data/scenarios` folder.
+
+    Returns a list of `ScenarioDefinition` objects used by the UI.
+    """
     return load_all_scenarios(SCENARIOS_DIR)
 
 
 @st.cache_data(show_spinner=False)
 def run_schedule(scenario_id: str):
+    """Run the scheduler for the selected scenario id.
+
+    The UI passes an overridden `Weights` object (from the sidebar) by
+    creating a replaced scenario instance before calling the scheduler.
+    """
     scenarios = {scenario.scenario_id: scenario for scenario in load_data()}
     return schedule_scenario(scenarios[scenario_id])
 
