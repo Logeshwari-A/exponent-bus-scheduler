@@ -1,16 +1,5 @@
 from __future__ import annotations
 
-"""Streamlit app entry for the Bus Charging Scheduler.
-
-This file provides a simple web UI used by non-technical reviewers to:
-- choose one of the 5 provided scenarios,
-- tune the three scoring weights (Individual, Operator, Overall),
-- run the scheduler, and
-- view per-bus timelines and per-station charge orders.
-
-Keep UI code minimal: the scheduler logic lives in `bus_scheduler.scheduler`.
-"""
-
 from pathlib import Path
 
 import pandas as pd
