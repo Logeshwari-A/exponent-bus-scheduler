@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import heapq
 
 from bus_scheduler.models import (
     BusChargeEvent,
@@ -18,6 +19,8 @@ from bus_scheduler.rules import CandidateEvaluation, DEFAULT_RULES
 @dataclass
 class SchedulerState:
     station_available_at: dict[str, int] = field(default_factory=dict)
+    station_heaps: dict[str, list[int]] = field(default_factory=dict)
+    station_capacity: dict[str, int] = field(default_factory=dict)
     operator_bus_count: dict[str, int] = field(default_factory=dict)
     total_scheduled_buses: int = 0
 
@@ -73,7 +76,8 @@ def _simulate_plan(
     bus: BusDefinition,
     route: RouteDefinition,
     plan: list[str],
-    station_available_at: dict[str, int],
+    station_heaps: dict[str, list[int]],
+    station_capacity: dict[str, int],
 ) -> tuple[BusTimeline, list[StationChargeEvent]]:
     ordered_nodes = route.ordered_nodes(bus.direction)
     current_node = ordered_nodes[0]
@@ -86,12 +90,19 @@ def _simulate_plan(
         travel_distance = route.distance_between(current_node, station)
         current_time += int(route.travel_minutes(travel_distance))
         arrival = current_time
-        station_free_at = station_available_at.get(station, 0)
-        charge_start = max(arrival, station_free_at)
+        heap = station_heaps.setdefault(station, [])
+        # free up finished charges
+        while heap and heap[0] <= arrival:
+            heapq.heappop(heap)
+        cap = station_capacity.get(station, 1)
+        if len(heap) < cap:
+            charge_start = arrival
+        else:
+            charge_start = heap[0]
         wait_minutes = charge_start - arrival
         charge_end = charge_start + route.charge_minutes
         total_wait += wait_minutes
-        station_available_at[station] = charge_end
+        heapq.heappush(heap, charge_end)
         charges.append(
             BusChargeEvent(
                 station=station,
@@ -138,8 +149,9 @@ def _evaluate_candidate(
     state: SchedulerState,
     scenario: ScenarioDefinition,
 ) -> tuple[BusTimeline, list[StationChargeEvent], float]:
-    station_available_at = dict(state.station_available_at)
-    timeline, station_events = _simulate_plan(bus, route, plan, station_available_at)
+    # copy heaps so the candidate simulation doesn't mutate shared state
+    station_heaps = {s: list(h) for s, h in state.station_heaps.items()}
+    timeline, station_events = _simulate_plan(bus, route, plan, station_heaps, state.station_capacity)
     candidate = CandidateEvaluation(
         bus_id=bus.bus_id,
         operator=bus.operator,
@@ -156,8 +168,11 @@ def _evaluate_candidate(
 
 
 def schedule_scenario(scenario: ScenarioDefinition) -> ScheduleResult:
+    # initialize station heaps and capacities
     state = SchedulerState(
         station_available_at={station: 0 for station in scenario.route.station_names},
+        station_heaps={station: [] for station in scenario.route.station_names},
+        station_capacity=scenario.route.station_capacity_map(),
         operator_bus_count={},
         total_scheduled_buses=0,
     )
@@ -207,8 +222,9 @@ def schedule_scenario(scenario: ScenarioDefinition) -> ScheduleResult:
         for event in best_station_events:
             station_events[event.station].append(event)
 
+        # commit chosen events into scheduler state heaps
         for event in best_station_events:
-            state.station_available_at[event.station] = event.charge_end_minute
+            heapq.heappush(state.station_heaps.setdefault(event.station, []), event.charge_end_minute)
         state.operator_bus_count[bus.operator] = state.operator_bus_count.get(bus.operator, 0) + 1
         state.total_scheduled_buses += 1
 

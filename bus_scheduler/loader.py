@@ -14,6 +14,7 @@ def _parse_route(route_data: dict) -> RouteDefinition:
         speed_kmph=float(route_data.get("speed_kmph", 60.0)),
         battery_range_km=float(route_data.get("battery_range_km", 240.0)),
         charge_minutes=int(route_data.get("charge_minutes", 25)),
+        station_capacities=dict(route_data.get("station_capacities", {})),
     )
 
 

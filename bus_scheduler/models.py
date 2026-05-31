@@ -15,6 +15,7 @@ class RouteDefinition:
     speed_kmph: float = 60.0
     battery_range_km: float = 240.0
     charge_minutes: int = 25
+    station_capacities: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if len(self.nodes) < 2:
@@ -25,6 +26,10 @@ class RouteDefinition:
     @property
     def station_names(self) -> list[str]:
         return self.nodes[1:-1]
+
+    def station_capacity_map(self) -> dict[str, int]:
+        stations = self.station_names
+        return {s: int(self.station_capacities.get(s, 1)) for s in stations}
 
     @property
     def total_distance_km(self) -> float:
