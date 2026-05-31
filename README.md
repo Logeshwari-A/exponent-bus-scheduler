@@ -8,6 +8,13 @@ Python + Streamlit bus charging scheduler for the Exponent take-home.
 pip install -r requirements.txt
 streamlit run app.py
 ```
+ 
+## Hosted app
+
+The app is hosted on Streamlit Community Cloud:
+
+https://exponent-bus-scheduler.streamlit.app
+
 
 ## What is implemented
 
@@ -22,4 +29,3 @@ Edit the `weights` block in a scenario JSON file. The scheduler reads the values
 ## How to add a new rule
 
 Add a rule class in `bus_scheduler/rules.py`, register it in `DEFAULT_RULES`, and add the matching weight field to `Weights`.
-# exponent-bus-scheduler
